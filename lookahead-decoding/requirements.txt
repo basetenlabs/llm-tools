@@ -1,0 +1,4 @@
+aiohttp==3.11.10
+matplotlib==3.10.1
+pandas==2.2.3
+tqdm==4.66.5

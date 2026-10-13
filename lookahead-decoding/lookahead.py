@@ -98,9 +98,10 @@ async def main(model_id, api_key, requests_dir, max_requests, concurrency, engin
                             async with aiohttp.ClientSession() as session:
                                 latency = await fetch(session, model_url, {"Authorization": f"Api-Key {api_key}"}, request)
                                 latencies.append(latency)
-                        except:
+                        except Exception:
                             print(
                                 f"Error with window_size: {window_size}, ngram_size: {ngram_size}, verification_set_size: {verification_set_size}")
+                            raise
 
                 tasks = []
 

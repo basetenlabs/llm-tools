@@ -64,4 +64,52 @@ class FetchTests(unittest.TestCase):
         with self.assertRaisesRegex(RuntimeError,"HTTP 500"): self.fetch(response,clock)
         self.assertFalse(response.read_called)
 
+    def test_sweep_error_aborts_before_aggregation(self):
+        import importlib.util
+        import tempfile
+        import types
+        from unittest.mock import Mock, patch
+
+        spec = importlib.util.spec_from_file_location(
+            "lookahead_under_test", Path(__file__).with_name("lookahead.py")
+        )
+        module = importlib.util.module_from_spec(spec)
+        spec.loader.exec_module(module)
+
+        class ClientSession:
+            async def __aenter__(self): return self
+            async def __aexit__(self, *_): pass
+
+        class Progress:
+            def __init__(self, *_): pass
+            def __enter__(self): return self
+            def __exit__(self, *_): pass
+            def update(self, *_): pass
+
+        calls = 0
+        async def fetch(*_):
+            nonlocal calls
+            calls += 1
+            if calls == 3:
+                raise RuntimeError("HTTP 500")
+            return 2.0
+
+        module.fetch = fetch
+        module.process_results = Mock()
+        module.plot_results = Mock()
+        aggregate = Mock()
+        modules = {
+            "aiohttp": types.SimpleNamespace(ClientSession=ClientSession),
+            "pandas": types.SimpleNamespace(DataFrame=aggregate),
+            "tqdm": types.SimpleNamespace(tqdm=Progress),
+        }
+        with tempfile.TemporaryDirectory() as directory, patch.dict(sys.modules, modules):
+            for number in range(2):
+                Path(directory, f"{number}.json").write_text("{}")
+            with self.assertRaisesRegex(RuntimeError, "HTTP 500"):
+                asyncio.run(module.main("test", "test-key", directory, 2, 1, 1, 1, 1))
+        aggregate.assert_not_called()
+        module.process_results.assert_not_called()
+        module.plot_results.assert_not_called()
+
 if __name__ == "__main__": unittest.main()

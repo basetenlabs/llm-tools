@@ -1,15 +1,16 @@
 import math
 import os
 import json
-import requests
 import time
-import aiohttp
 import asyncio
-from tqdm import tqdm
 import argparse
-import pandas as pd
-import io
-import matplotlib.pyplot as plt
+
+
+def positive_int(value):
+    parsed = int(value)
+    if parsed < 1:
+        raise argparse.ArgumentTypeError("must be at least 1")
+    return parsed
 
 
 def max_draft_len(windows_size, ngram_size, verification_set_size):
@@ -19,20 +20,24 @@ def max_draft_len(windows_size, ngram_size, verification_set_size):
 async def fetch(session, url, headers, json):
     start_time = time.time()
     async with session.post(url, headers=headers, json=json) as response:
+        response.raise_for_status()
+        await response.read()
         return time.time() - start_time
 
 
 async def main(model_id, api_key, requests_dir, max_requests, concurrency, engine_window_size, engine_ngram_size, engine_verification_set):
+    import aiohttp
+    import pandas as pd
+    from tqdm import tqdm
 
     model_url = f"https://model-{model_id}.api.baseten.co/environments/production/predict"
 
     request_data = []
 
     # Sweeps
-    window_sizes = list(range(1, engine_window_size, 1))
-    verification_set_sizes = list(range(1, engine_verification_set, 1))
-    ngram_sizes = list(pow(2, i)
-                       for i in range(1, int(math.sqrt(engine_ngram_size))-1))
+    window_sizes = list(range(1, engine_window_size + 1))
+    verification_set_sizes = list(range(1, engine_verification_set + 1))
+    ngram_sizes = [2**i for i in range(int(math.log2(engine_ngram_size)) + 1)]
 
     if engine_ngram_size not in ngram_sizes:
         ngram_sizes.append(engine_ngram_size)
@@ -93,9 +98,10 @@ async def main(model_id, api_key, requests_dir, max_requests, concurrency, engin
                             async with aiohttp.ClientSession() as session:
                                 latency = await fetch(session, model_url, {"Authorization": f"Api-Key {api_key}"}, request)
                                 latencies.append(latency)
-                        except:
+                        except Exception:
                             print(
                                 f"Error with window_size: {window_size}, ngram_size: {ngram_size}, verification_set_size: {verification_set_size}")
+                            raise
 
                 tasks = []
 
@@ -144,6 +150,7 @@ def process_results(df):
 
 
 def plot_results(df):
+    import matplotlib.pyplot as plt
 
     df.plot(y=['P50', 'P90', 'P99'], x='Run')
     plt.xticks(range(len(df['Run'])), df['Run'], rotation=90)
@@ -160,7 +167,7 @@ if __name__ == "__main__":
     parser.add_argument('--model',
                         type=str,
                         required=True,
-                        help='The model URL to send requests to')
+                        help='The Baseten model ID to send requests to')
 
     parser.add_argument('--api_key',
                         type=str,
@@ -174,31 +181,31 @@ if __name__ == "__main__":
                         help='The directory containing the requests to send to the model. Each request should be a separate JSON file')
 
     parser.add_argument('--max_requests',
-                        type=int,
+                        type=positive_int,
                         required=False,
                         default=10000000,
                         help='The maximum number of requests to use from the request_dir. This is useful for running a subset of the requests')
 
     parser.add_argument('--request_concurrency',
-                        type=int,
+                        type=positive_int,
                         required=False,
                         default=10,
                         help='The maximum number of parallel requests to send to the model')
 
     parser.add_argument('--window_size',
-                        type=int,
+                        type=positive_int,
                         required=True,
                         help='The maximum window size for the lookahead decoding. This should match the configuration the engine was built with')
 
     parser.add_argument('--ngram_size',
-                        type=int,
+                        type=positive_int,
                         required=True,
                         help='The maximum ngram size for the lookahead decoding. This should match the configuration the engine was built with')
 
     parser.add_argument('--verification_size',
-                        type=int,
+                        type=positive_int,
                         required=True,
-                        help='The maximum ngram size for the lookahead decoding. This should match the configuration the engine was built with')
+                        help='The maximum verification set size. This should match the configuration the engine was built with')
 
     args = parser.parse_args()
 

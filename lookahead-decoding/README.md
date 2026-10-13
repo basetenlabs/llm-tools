@@ -61,7 +61,7 @@ Simply run the lookahead performance script with your Baseten model id, api key 
 python lookahead.py --model {baseten model id} --api_key {api key} --window_size 3 --ngram_size 64 --verification_size 5
 ```
 
-**--model** - (Required) The model URL to send requests to
+**--model** - (Required) The Baseten model ID. The script calls that model's production `/predict` endpoint.
 
 **--api_key** - (Required) The baseten API key for the model
 
@@ -75,9 +75,11 @@ python lookahead.py --model {baseten model id} --api_key {api key} --window_size
 
 **--ngram_size** - (Required) The maximum ngram size for the lookahead decoding. This should match the configuration the engine was built with.
 
-**--verification_size** - (Required) The maximum ngram size for the lookahead decoding. This should match the configuration the engine was built with.
+**--verification_size** - (Required) The maximum verification set size. This should match the configuration the engine was built with.
 
 ### Interpreting Results
+
+Each request is timed until its response body has been read. HTTP errors stop the sweep instead of being counted as successful low-latency requests. These results measure end-to-end response time, not time to first token.
 
 The performance tests will print out the lookahead decoding settings that resulted in the lowest E2E latency (P50, P90, P99) as well as graphs that show the latency vs lookahead configuration. We suggest finding the right balance between P50 & P90 latency, for some use cases we have seen the optimal P50 result in very bad P90s and selected a configuration that kept the overall system performance in mind.
 
